@@ -1,0 +1,3 @@
+# web (画面) イメージに入れる Python ライブラリ
+flask
+openpyxl

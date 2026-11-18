@@ -1,0 +1,47 @@
+x-hardened: &hardened
+  environment:
+    TZ: Asia/Tokyo   # 日時を日本時間で記録する (標準は UTC で 9 時間ずれる)
+  read_only: true
+  cap_drop:
+    - ALL
+  security_opt:
+    - no-new-privileges:true
+  pids_limit: 256
+
+services:
+  # 画面 (アップロードと結果表示)。コードは実行しない。http://localhost:8000
+  web:
+    <<: *hardened
+    image: run-sheet-c-web
+    build: {context: ., target: web}
+    ports:
+      - "8000:8000"   # LAN 内の他の PC からも開ける (Basic 認証あり。root=全操作 / sa=閲覧のみ)
+    environment:
+      TZ: Asia/Tokyo
+      ROOT_USER: ${ROOT_USER:-root}
+      ROOT_PASSWORD: ${ROOT_PASSWORD:?.env に ROOT_PASSWORD を設定してください (.env.example 参照)}
+      SA_USER: ${SA_USER:-sa}
+      SA_PASSWORD: ${SA_PASSWORD:-}   # 空ならこのユーザーは無効
+    tmpfs:
+      - /tmp
+    volumes:
+      - work:/work
+    restart: unless-stopped
+
+  # 提出コードのコンパイル・実行。外部通信はできない。gcc 11.3.0 (c1byod の MSYS2 と同じ版)
+  worker:
+    <<: *hardened
+    image: run-sheet-c-worker
+    build: {context: ., target: worker}
+    entrypoint: ["python3", "/app/worker.py"]
+    network_mode: none
+    tmpfs:
+      - /tmp:size=256m,exec    # コンパイル結果の置き場 (実行ファイルを動かすため exec が必要)
+    mem_limit: 1g
+    volumes:
+      - work:/work
+      - ./output:/output   # 完了した実行を ./output/jobs/<タグ>/<id>/ に書き出す (JSON と CSV)
+    restart: unless-stopped
+
+volumes:
+  work:
